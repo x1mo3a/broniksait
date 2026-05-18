@@ -189,20 +189,23 @@ app.listen(PORT, () => {
   console.log(`License server running on http://localhost:${PORT}`);
 });
 
-// Start Telegram bot if config is present
+// Start Telegram bot. Config from env vars first, then config.json fallback.
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 try {
-  if (fs.existsSync(CONFIG_FILE)) {
+  let token = process.env.TG_TOKEN || '';
+  let adminIds = (process.env.ADMIN_IDS || '')
+    .split(',').map(s => Number(s.trim())).filter(Boolean);
+
+  if ((!token || !adminIds.length) && fs.existsSync(CONFIG_FILE)) {
     const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-    bot.start({
-      token: cfg.telegramToken,
-      adminIds: cfg.adminIds || [],
-      generateKey,
-      loadDB,
-      saveDB
-    });
+    if (!token) token = cfg.telegramToken;
+    if (!adminIds.length) adminIds = cfg.adminIds || [];
+  }
+
+  if (token) {
+    bot.start({ token, adminIds, generateKey, loadDB, saveDB });
   } else {
-    console.log('[bot] config.json not found, Telegram bot disabled. Copy config.example.json -> config.json to enable.');
+    console.log('[bot] No TG_TOKEN env var and no config.json — Telegram bot disabled.');
   }
 } catch (e) {
   console.error('[bot] failed to start:', e.message);
