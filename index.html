@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>License Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-1: #0a0b10;
+    --bg-2: #0f1119;
+    --panel: rgba(23, 26, 35, 0.7);
+    --panel-solid: #171a23;
+    --panel-2: #1f242f;
+    --text: #eef0f5;
+    --muted: #8089a0;
+    --accent: #7c5cff;
+    --accent-2: #4f8cff;
+    --accent-glow: rgba(124, 92, 255, 0.35);
+    --ok: #22c55e;
+    --bad: #ef4444;
+    --warn: #f59e0b;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(1200px 600px at 10% -10%, rgba(124, 92, 255, 0.18), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(79, 140, 255, 0.15), transparent 60%),
+      radial-gradient(800px 600px at 50% 100%, rgba(34, 197, 94, 0.08), transparent 60%),
+      linear-gradient(180deg, var(--bg-1), var(--bg-2));
+    background-attachment: fixed;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
+  }
+  .bg-noise::before {
+    content: "";
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    pointer-events: none;
+    opacity: 0.6;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 1;
+    padding: 26px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+    background: rgba(10, 11, 16, 0.5);
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+  }
+  .logo-mark {
+    width: 32px; height: 32px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 6px 20px var(--accent-glow);
+    display: grid; place-items: center;
+    color: white;
+    font-weight: 800;
+  }
+  header .right { display: flex; align-items: center; gap: 14px; }
+  .badge {
+    background: var(--panel-2);
+    color: var(--muted);
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+  }
+  .badge .dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    margin-right: 7px;
+    box-shadow: 0 0 8px var(--ok);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  main {
+    position: relative;
+    z-index: 1;
+    max-width: 1180px;
+    margin: 36px auto;
+    padding: 0 28px;
+    display: grid;
+    gap: 22px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    backdrop-filter: blur(10px);
+    transition: transform .2s, border-color .2s;
+  }
+  .stat:hover { transform: translateY(-2px); border-color: rgba(124, 92, 255, 0.3); }
+  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
+  .stat .value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
+  }
+  .card h2 {
+    margin: 0 0 16px;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .card h2 svg { opacity: .8; }
+
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+  select, button, input {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 16px;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: all .15s;
+  }
+  select:focus, input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+  button {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-color: transparent;
+    color: white;
+    cursor: pointer;
+    font-weight: 600;
+    box-shadow: 0 4px 16px var(--accent-glow);
+  }
+  button:hover { transform: translateY(-1px); box-shadow: 0 6px 22px var(--accent-glow); }
+  button:active { transform: translateY(0); }
+  button.ghost {
+    background: var(--panel-2);
+    color: var(--text);
+    border-color: var(--border);
+    box-shadow: none;
+  }
+  button.ghost:hover { background: #262b38; transform: none; box-shadow: none; }
+  button.danger {
+    background: transparent;
+    color: var(--bad);
+    border-color: rgba(239, 68, 68, 0.3);
+    box-shadow: none;
+  }
+  button.danger:hover { background: rgba(239, 68, 68, 0.1); transform: none; box-shadow: none; }
+  button.small { padding: 6px 12px; font-size: 12px; }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--panel-2);
+    padding: 4px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+  .tab {
+    padding: 8px 14px;
+    border-radius: 8px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all .15s;
+  }
+  .tab.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: white;
+    box-shadow: 0 2px 12px var(--accent-glow);
+  }
+  .tab:not(.active):hover { color: var(--text); }
+
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 4px;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    background: rgba(255,255,255,0.02);
+  }
+  th:first-child { border-top-left-radius: 10px; }
+  th:last-child { border-top-right-radius: 10px; }
+  tbody tr { transition: background .12s; }
+  tbody tr:hover td { background: rgba(124, 92, 255, 0.04); }
+  .key-cell {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: #d8def0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+  .pill.ok   { background: rgba(34,197,94,.13);  color: var(--ok);   border: 1px solid rgba(34,197,94,.3); }
+  .pill.bad  { background: rgba(239,68,68,.13);  color: var(--bad);  border: 1px solid rgba(239,68,68,.3); }
+  .pill.warn { background: rgba(245,158,11,.13); color: var(--warn); border: 1px solid rgba(245,158,11,.3); }
+  .pill.muted{ background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
+
+  .ip-cell { color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .ip-cell small { display: block; color: var(--muted); margin-top: 2px; font-family: 'Inter', sans-serif; font-size: 11px; }
+
+  .empty {
+    padding: 50px 30px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .empty .big { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
+
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: rgba(31, 36, 47, 0.95);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 14px 18px;
+    border-radius: 12px;
+    box-shadow: 0 12px 36px rgba(0,0,0,.5);
+    transform: translateY(20px);
+    opacity: 0;
+    transition: all .25s;
+    pointer-events: none;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.ok { border-color: rgba(34,197,94,.4); }
+
+  @media (max-width: 720px) {
+    header { padding: 18px 20px; }
+    main { padding: 0 16px; margin: 20px auto; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    th:nth-child(5), td:nth-child(5),
+    th:nth-child(6), td:nth-child(6) { display: none; }
+  }
+</style>
+</head>
+<body class="bg-noise">
+<header>
+  <div class="logo">
+    <div class="logo-mark">L</div>
+    <span>License Manager</span>
+  </div>
+  <div class="right">
+    <span class="badge"><span class="dot"></span>online</span>
+    <span class="badge" id="server-info">/api</span>
+  </div>
+</header>
+
+<main>
+  <section class="stats" id="stats">
+    <div class="stat"><div class="label">Total keys</div><div class="value" id="s-total">—</div></div>
+    <div class="stat"><div class="label">Active</div><div class="value" id="s-active" style="color: var(--ok);">—</div></div>
+    <div class="stat"><div class="label">Unbound</div><div class="value" id="s-unbound" style="color: var(--warn);">—</div></div>
+    <div class="stat"><div class="label">Expired</div><div class="value" id="s-expired" style="color: var(--bad);">—</div></div>
+  </section>
+
+  <section class="card">
+    <h2>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      Generate new key
+    </h2>
+    <div class="row">
+      <div class="tabs" id="dur-tabs" role="tablist">
+        <div class="tab" data-d="7">7 days</div>
+        <div class="tab active" data-d="30">30 days</div>
+        <div class="tab" data-d="14">14 days</div>
+        <div class="tab" data-d="90">90 days</div>
+        <div class="tab" data-d="0">∞ Forever</div>
+      </div>
+      <button id="generate-btn">+ Generate</button>
+      <button class="ghost" id="refresh-btn">⟳ Refresh</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h18"/></svg>
+      All keys
+    </h2>
+    <div id="keys-container">
+      <div class="empty"><div class="big">⌛</div>Loading...</div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api';
+
+function fmtDate(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  return d.toLocaleString();
+}
+function statusOf(k) {
+  if (k.blocked) return { cls: 'bad', text: 'blocked' };
+  if (k.frozen) return { cls: 'warn', text: 'frozen' };
+  if (k.expiresAt !== null && Date.now() > k.expiresAt) return { cls: 'bad', text: 'expired' };
+  if (k.boundIP) return { cls: 'ok', text: 'active' };
+  return { cls: 'warn', text: 'unbound' };
+}
+function durLabel(d) { return d === 0 ? 'forever' : d + ' days'; }
+
+function showToast(msg, kind) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+async function loadKeys() {
+  const res = await fetch(API + '/keys');
+  const keys = await res.json();
+  const container = document.getElementById('keys-container');
+
+  // stats
+  let active = 0, unbound = 0, expired = 0;
+  for (const k of keys) {
+    const s = statusOf(k);
+    if (s.text === 'active') active++;
+    else if (s.text === 'unbound' || s.text === 'frozen') unbound++;
+    else if (s.text === 'expired' || s.text === 'blocked') expired++;
+  }
+  document.getElementById('s-total').textContent = keys.length;
+  document.getElementById('s-active').textContent = active;
+  document.getElementById('s-unbound').textContent = unbound;
+  document.getElementById('s-expired').textContent = expired;
+
+  if (!keys.length) {
+    container.innerHTML = '<div class="empty"><div class="big">∅</div>No keys yet. Generate your first one above.</div>';
+    return;
+  }
+  keys.sort((a, b) => b.createdAt - a.createdAt);
+  let html = `<table>
+    <thead><tr>
+      <th>Key</th><th>Duration</th><th>Status</th><th>Bound IP</th>
+      <th>Created</th><th>Expires</th><th></th>
+    </tr></thead><tbody>`;
+  for (const k of keys) {
+    const s = statusOf(k);
+    html += `<tr>
+      <td><div class="key-cell">${k.key}<button class="ghost small" data-copy="${k.key}">copy</button></div></td>
+      <td>${durLabel(k.durationDays)}</td>
+      <td><span class="pill ${s.cls}">${s.text}</span></td>
+      <td class="ip-cell">${k.boundIP ? k.boundIP + '<small>' + fmtDate(k.boundAt) + '</small>' : '<span class="pill muted">not bound</span>'}</td>
+      <td>${fmtDate(k.createdAt)}</td>
+      <td>${k.expiresAt === null ? '<span class="pill muted">∞</span>' : fmtDate(k.expiresAt)}</td>
+      <td style="text-align:right;white-space:nowrap;">
+        ${k.boundIP ? `<button class="ghost small" data-reset="${k.key}">unbind</button> ` : ''}
+        <button class="danger small" data-del="${k.key}">delete</button>
+      </td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+document.addEventListener('click', async (e) => {
+  const t = e.target;
+  if (t.dataset.copy) {
+    await navigator.clipboard.writeText(t.dataset.copy);
+    showToast('Key copied to clipboard', 'ok');
+  } else if (t.dataset.del) {
+    if (!confirm('Delete this key?')) return;
+    await fetch(API + '/keys/' + encodeURIComponent(t.dataset.del), { method: 'DELETE' });
+    showToast('Key deleted');
+    loadKeys();
+  } else if (t.dataset.reset) {
+    await fetch(API + '/keys/' + encodeURIComponent(t.dataset.reset) + '/reset', { method: 'POST' });
+    showToast('IP unbound');
+    loadKeys();
+  }
+});
+
+// duration tabs
+document.getElementById('dur-tabs').addEventListener('click', (e) => {
+  if (!e.target.dataset.d) return;
+  document.querySelectorAll('#dur-tabs .tab').forEach(x => x.classList.remove('active'));
+  e.target.classList.add('active');
+});
+
+document.getElementById('generate-btn').addEventListener('click', async () => {
+  const active = document.querySelector('#dur-tabs .tab.active');
+  const duration = Number(active ? active.dataset.d : 30);
+  const res = await fetch(API + '/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ duration })
+  });
+  const data = await res.json();
+  if (data.error) { showToast('Error: ' + data.error); return; }
+  await navigator.clipboard.writeText(data.key).catch(() => {});
+  showToast('Generated & copied: ' + data.key, 'ok');
+  loadKeys();
+});
+
+document.getElementById('refresh-btn').addEventListener('click', loadKeys);
+
+loadKeys();
+setInterval(loadKeys, 10000);
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "keys": [
+    {
+      "key": "KEY-A10C-AFB0-C1EE-DD2F",
+      "durationDays": 7,
+      "createdAt": 1779103030026,
+      "expiresAt": 1779707830026,
+      "boundIP": "91.236.139.96",
+      "boundAt": 1779103101780,
+      "frozen": false,
+      "frozenRemaining": null,
+      "blocked": false
+    }
+  ]
+}
