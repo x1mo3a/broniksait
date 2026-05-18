@@ -10,7 +10,13 @@ const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'keys.json');
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+const PUBLIC_DIR = path.join(__dirname, 'public');
+app.use(express.static(PUBLIC_DIR));
+
+// Explicit fallback for the root URL (helps when something else hijacks it)
+app.get('/', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+});
 
 // trust proxy so req.ip returns real client IP behind proxies
 app.set('trust proxy', true);
