@@ -21,13 +21,57 @@ app.get('/', (req, res) => {
 // trust proxy so req.ip returns real client IP behind proxies
 app.set('trust proxy', true);
 
-function loadDB() {
-  try {
-    if (!fs.existsSync(DB_FILE)) return { keys: [] };
-    return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-  } catch (e) {
-    return { keys: [] };
+// UID 0 is reserved (admin slot) and never auto-assigned. Auto IDs start at 1.
+function ensureUids(db) {
+  const used = new Set();
+  for (const k of db.keys) {
+    if (typeof k.uid === 'number') used.add(k.uid);
   }
+  let next = 1;
+  while (used.has(next)) next++;
+
+  const sorted = db.keys.slice().sort((a, b) => a.createdAt - b.createdAt);
+  let changed = false;
+  for (const k of sorted) {
+    if (typeof k.uid !== 'number') {
+      while (used.has(next)) next++;
+      k.uid = next;
+      used.add(next);
+      next++;
+      changed = true;
+    }
+  }
+  if (typeof db.nextUid !== 'number' || db.nextUid < 1) {
+    db.nextUid = next;
+    changed = true;
+  }
+  return changed;
+}
+
+function loadDB() {
+  let db;
+  try {
+    if (!fs.existsSync(DB_FILE)) db = { keys: [], nextUid: 0 };
+    else db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+  } catch (e) {
+    db = { keys: [], nextUid: 0 };
+  }
+  if (!Array.isArray(db.keys)) db.keys = [];
+  const changed = ensureUids(db);
+  if (changed) {
+    try { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); } catch (_) {}
+  }
+  return db;
+}
+
+function takeUid(db) {
+  if (typeof db.nextUid !== 'number' || db.nextUid < 1) db.nextUid = 1;
+  const used = new Set();
+  for (const k of db.keys) if (typeof k.uid === 'number') used.add(k.uid);
+  while (used.has(db.nextUid) || db.nextUid === 0) db.nextUid++;
+  const u = db.nextUid;
+  db.nextUid++;
+  return u;
 }
 
 function saveDB(db) {
@@ -106,12 +150,15 @@ app.post('/api/generate', (req, res) => {
   const now = Date.now();
   const expiresAt = d === 0 ? null : now + d * 24 * 60 * 60 * 1000;
   const newKey = {
+    uid: takeUid(db),
     key: generateKey(),
     durationDays: d,
     createdAt: now,
     expiresAt,
     boundIP: null,
-    boundAt: null
+    boundAt: null,
+    frozen: false, frozenRemaining: null,
+    blocked: false
   };
   db.keys.push(newKey);
   saveDB(db);
@@ -131,6 +178,25 @@ app.delete('/api/keys/:key', (req, res) => {
   db.keys = db.keys.filter(k => k.key !== req.params.key);
   saveDB(db);
   res.json({ deleted: before - db.keys.length });
+});
+
+// Change UID
+app.post('/api/keys/:key/uid', (req, res) => {
+  const newUid = Number(req.body && req.body.uid);
+  if (!Number.isInteger(newUid) || newUid < 0) {
+    return res.status(400).json({ error: 'UID must be a non-negative integer.' });
+  }
+  const db = loadDB();
+  const k = db.keys.find(x => x.key === req.params.key);
+  if (!k) return res.status(404).json({ error: 'Not found' });
+  if (k.uid === newUid) return res.json(k);
+  if (db.keys.some(x => x.uid === newUid && x.key !== k.key)) {
+    return res.status(409).json({ error: 'UID already in use by another key.' });
+  }
+  k.uid = newUid;
+  if (typeof db.nextUid !== 'number' || db.nextUid <= newUid) db.nextUid = newUid + 1;
+  saveDB(db);
+  res.json(k);
 });
 
 // Reset binding (release IP)
@@ -179,6 +245,8 @@ app.post('/api/validate', async (req, res) => {
   res.json({
     status: 'granted',
     message: 'access granted!',
+    uid: k.uid,
+    isAdmin: k.uid === 0,
     boundIP: k.boundIP,
     expiresAt: k.expiresAt,
     durationDays: k.durationDays
