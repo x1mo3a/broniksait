@@ -82,10 +82,33 @@ function start(opts) {
   bot.on('polling_error', (e) => console.error('[bot] polling error:', e.message));
 
   // ---------- key ops ----------
+  function takeUid(db) {
+    if (typeof db.nextUid !== 'number' || db.nextUid < 1) db.nextUid = 1;
+    const used = new Set();
+    for (const x of db.keys) if (typeof x.uid === 'number') used.add(x.uid);
+    while (used.has(db.nextUid) || db.nextUid === 0) db.nextUid++;
+    const u = db.nextUid;
+    db.nextUid++;
+    return u;
+  }
+  function setKeyUid(keyStr, newUid) {
+    const db = loadDB();
+    const k = db.keys.find(x => x.key === keyStr);
+    if (!k) return { error: 'not_found' };
+    if (k.uid === newUid) return { k };
+    if (db.keys.some(x => x.uid === newUid && x.key !== k.key)) {
+      return { error: 'in_use' };
+    }
+    k.uid = newUid;
+    if (typeof db.nextUid !== 'number' || db.nextUid <= newUid) db.nextUid = newUid + 1;
+    saveDB(db);
+    return { k };
+  }
   function createKey(d) {
     const db = loadDB();
     const now = Date.now();
     const k = {
+      uid: takeUid(db),
       key: generateKey(),
       durationDays: d,
       createdAt: now,
@@ -199,7 +222,8 @@ function start(opts) {
     const rows = slice.map(k => {
       const s = statusOf(k);
       const ip = k.boundIP || 'no-ip';
-      const label = `${statusEmoji(s)} ${shortKey(k.key)} • ${ip}`;
+      const uidTag = k.uid === 0 ? '👑#0' : '#' + k.uid;
+      const label = `${statusEmoji(s)} ${uidTag} ${shortKey(k.key)} • ${ip}`;
       return [{ text: label, callback_data: 'k:' + k.key }];
     });
 
@@ -215,7 +239,9 @@ function start(opts) {
 
   function keyDetailText(k) {
     const s = statusOf(k);
+    const adminTag = k.uid === 0 ? '  👑 *ADMIN*' : '';
     const lines = [
+      `*UID:* \`#${k.uid}\`${adminTag}`,
       `*Key:* \`${k.key}\``,
       `*Status:* ${statusEmoji(s)} ${s}`,
       `*Duration:* ${durLabel(k.durationDays)}`,
@@ -245,7 +271,10 @@ function start(opts) {
           ? { text: '✅ Unblock',  callback_data: 'k:unblock:'  + k.key }
           : { text: '⛔ Block',    callback_data: 'k:block:'    + k.key }
       ],
-      [{ text: '🔓 Unbind IP', callback_data: 'k:unbind:' + k.key }],
+      [
+        { text: '🆔 Set UID',   callback_data: 'k:setuid:' + k.key },
+        { text: '🔓 Unbind IP', callback_data: 'k:unbind:' + k.key }
+      ],
       [{ text: '🗑 Delete',    callback_data: 'k:delask:' + k.key }],
       [{ text: '← Back to users', callback_data: 'users:0' }]
     ];
@@ -320,12 +349,13 @@ function start(opts) {
     bot.sendMessage(msg.chat.id, `Your ID: \`${msg.from.id}\``, { parse_mode: 'Markdown' });
   });
 
-  // free-text input handler (for "add admin" flow)
+  // free-text input handler (for multi-step flows)
   bot.on('message', (msg) => {
     if (!msg.text || msg.text.startsWith('/')) return;
     if (!isAdmin(msg.from.id)) return;
     const st = state.get(msg.chat.id);
     if (!st) return;
+
     if (st.awaiting === 'addAdminId') {
       state.delete(msg.chat.id);
       if (!isSuper(msg.from.id)) {
@@ -340,6 +370,24 @@ function start(opts) {
       bot.sendMessage(msg.chat.id, `✅ Added admin \`${id}\``, { parse_mode: 'Markdown' });
       const v = adminsView();
       bot.sendMessage(msg.chat.id, v.text, { parse_mode: 'Markdown', reply_markup: v.kb });
+      return;
+    }
+
+    if (st.awaiting === 'setUid') {
+      state.delete(msg.chat.id);
+      const newUid = Number(msg.text.trim());
+      if (!Number.isInteger(newUid) || newUid < 0) {
+        return bot.sendMessage(msg.chat.id, 'UID must be a non-negative integer (e.g. 0, 1, 42).');
+      }
+      const result = setKeyUid(st.key, newUid);
+      if (result.error === 'not_found') return bot.sendMessage(msg.chat.id, 'Key not found.');
+      if (result.error === 'in_use')    return bot.sendMessage(msg.chat.id, '❌ UID already used by another key.');
+      const k = result.k;
+      bot.sendMessage(msg.chat.id, `✅ UID set to *#${newUid}*${newUid === 0 ? '  👑 *ADMIN*' : ''}`,
+        { parse_mode: 'Markdown' });
+      bot.sendMessage(msg.chat.id, keyDetailText(k),
+        { parse_mode: 'Markdown', reply_markup: keyActionKb(k) });
+      return;
     }
   });
 
@@ -441,6 +489,14 @@ function start(opts) {
         if (action === 'block')    { const k = blockKey(key);    if (!k) return ack('Not found'); ack('Blocked');   return editText('⛔ Blocked\n\n' + keyDetailText(k), keyActionKb(k)); }
         if (action === 'unblock')  { const k = unblockKey(key);  if (!k) return ack('Not found'); ack('Unblocked'); return editText('✅ Unblocked\n\n' + keyDetailText(k), keyActionKb(k)); }
         if (action === 'unbind')   { const k = unbindKey(key);   if (!k) return ack('Not found'); ack('Unbound');   return editText('🔓 Unbound\n\n' + keyDetailText(k), keyActionKb(k)); }
+
+        if (action === 'setuid') {
+          ack();
+          state.set(cq.message.chat.id, { awaiting: 'setUid', key });
+          return bot.sendMessage(cq.message.chat.id,
+            'Send the new UID number (≥ 0).\n_UID `0` is the admin slot._',
+            { parse_mode: 'Markdown' });
+        }
 
         if (action === 'delask') {
           ack();
