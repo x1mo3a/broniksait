@@ -402,15 +402,20 @@ async function loadKeys() {
     container.innerHTML = '<div class="empty"><div class="big">∅</div>No keys yet. Generate your first one above.</div>';
     return;
   }
-  keys.sort((a, b) => b.createdAt - a.createdAt);
+  keys.sort((a, b) => (a.uid ?? 0) - (b.uid ?? 0));
   let html = `<table>
     <thead><tr>
-      <th>Key</th><th>Duration</th><th>Status</th><th>Bound IP</th>
+      <th>UID</th><th>Key</th><th>Duration</th><th>Status</th><th>Bound IP</th>
       <th>Created</th><th>Expires</th><th></th>
     </tr></thead><tbody>`;
   for (const k of keys) {
     const s = statusOf(k);
+    const uidPill = k.uid === 0
+      ? '<span class="pill ok" title="Admin">👑 #0</span>'
+      : '<span class="pill muted">#' + (k.uid ?? '?') + '</span>';
+    const uidCell = uidPill + ' <button class="ghost small" data-uid="' + k.key + '" title="Change UID">✏️</button>';
     html += `<tr>
+      <td>${uidCell}</td>
       <td><div class="key-cell">${k.key}<button class="ghost small" data-copy="${k.key}">copy</button></div></td>
       <td>${durLabel(k.durationDays)}</td>
       <td><span class="pill ${s.cls}">${s.text}</span></td>
@@ -440,6 +445,20 @@ document.addEventListener('click', async (e) => {
   } else if (t.dataset.reset) {
     await fetch(API + '/keys/' + encodeURIComponent(t.dataset.reset) + '/reset', { method: 'POST' });
     showToast('IP unbound');
+    loadKeys();
+  } else if (t.dataset.uid) {
+    const v = prompt('Enter new UID (non-negative integer; 0 = admin):');
+    if (v === null) return;
+    const uid = Number(v.trim());
+    if (!Number.isInteger(uid) || uid < 0) { showToast('Invalid UID'); return; }
+    const r = await fetch(API + '/keys/' + encodeURIComponent(t.dataset.uid) + '/uid', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid })
+    });
+    const data = await r.json();
+    if (data.error) { showToast('❌ ' + data.error); return; }
+    showToast('UID updated to #' + uid, 'ok');
     loadKeys();
   }
 });
